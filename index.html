@@ -81,7 +81,10 @@
   <div id="scannerBox" class="card hidden">
     <strong>Barcode vor die Kamera halten</strong>
     <div id="reader"></div>
-    <button class="btn-secondary" style="width:100%; margin-top:10px;" onclick="stopScanner()">Abbrechen</button>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="btn-primary" style="flex:1;" onclick="switchCamera()">🔄 Kamera wechseln</button>
+      <button class="btn-secondary" style="flex:1;" onclick="stopScanner()">Abbrechen</button>
+    </div>
   </div>
 
   <!-- Eingabeformular -->
@@ -130,7 +133,7 @@
 
 <script>
   // 1. HIER DEINE GOOGLE APPS SCRIPT WEB-APP-URL IN ANFÜHRUNGSZEICHEN EINTRAGEN:
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxRJDa2YrMNpY9brSuCspUiPZ6SQUO3_P-FXRvdQp-huDDorogPi_pS6f7dDzdFB8u1Og/exec';
+  const SCRIPT_URL = 'DEINE_GOOGLE_APPS_SCRIPT_URL_HIER_EINFUEGEN';
 
   // 2. ZENTRALE LISTE DER LAGERORTE (hier beliebig erweitern):
   const LOCATIONS = ['Kühlschrank', 'Gefrierschrank', 'Vorratskammer', 'Keller'];
@@ -138,6 +141,8 @@
   let inventory = [];
   let currentFilter = 'Alle';
   let html5QrCode = null;
+  // Merkt sich pro Gerät (Handy vs. Tablet), ob Front- ("user") oder Rückkamera ("environment") aktiv ist
+  let currentFacingMode = localStorage.getItem('preferredCamera') || 'environment';
 
   // Lagerorte automatisch in Formular & Filterleiste einfügen
   function initLocations() {
@@ -275,13 +280,20 @@
     await loadInventory();
   }
 
-  // 1. BARCODE SCANNER
+  // 1. BARCODE SCANNER (mit Front-/Rückkamera-Umschaltung)
   function openBarcodeForm() {
     closeForm();
     document.getElementById('scannerBox').classList.remove('hidden');
+    startScanner();
+  }
+
+  function startScanner() {
+    if (html5QrCode) {
+      html5QrCode.stop().catch(() => {});
+    }
     html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
-      { facingMode: "environment" },
+      { facingMode: currentFacingMode },
       { fps: 10, qrbox: { width: 250, height: 150 } },
       async (decodedText) => {
         stopScanner();
@@ -290,10 +302,22 @@
         await fetchOpenFoodFacts(decodedText);
       }
     ).catch(err => {
-      stopScanner();
-      prepareForm('', false);
-      showStatus('Kamera nicht verfügbar – bitte manuell eingeben.');
+      if (currentFacingMode === 'environment') {
+        currentFacingMode = 'user';
+        localStorage.setItem('preferredCamera', 'user');
+        startScanner();
+      } else {
+        stopScanner();
+        prepareForm('', false);
+        showStatus('Kamera nicht verfügbar – bitte manuell eingeben.');
+      }
     });
+  }
+
+  function switchCamera() {
+    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+    localStorage.setItem('preferredCamera', currentFacingMode);
+    startScanner();
   }
 
   function stopScanner() {

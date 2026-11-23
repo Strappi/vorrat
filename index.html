@@ -291,9 +291,10 @@ const LOCATION_ICONS = {
         }
       }
 
-      const locOptions = LOCATIONS.map(loc =>
-        `<option value="${loc}" ${item.location === loc ? 'selected' : ''}>📍 ${loc}</option>`
-      ).join('');
+    const locOptions = LOCATIONS.map(loc => {
+        const icon = LOCATION_ICONS[loc] || '📦';
+        return `<option value="${loc}" ${item.location === loc ? 'selected' : ''}>${icon} ${loc}</option>`;
+      }).join('');
 
       return `
         <div class="card">

@@ -13,7 +13,6 @@
       --text: #0f172a;
       --muted: #64748b;
       --danger: #dc2626;
-      --warn: #d97706;
     }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { margin: 0; background: var(--bg); color: var(--text); padding-bottom: 80px; }
@@ -27,7 +26,6 @@
     .btn-nfc { background: #0f766e; color: #fff; }
     .btn-secondary { background: #e2e8f0; color: var(--text); }
     
-    /* Mengen-Steuerung in der Karte */
     .qty-controls { display: flex; align-items: center; gap: 6px; }
     .btn-qty { padding: 6px 12px; border-radius: 8px; font-size: 1rem; font-weight: 700; }
     .btn-minus { background: #fee2e2; color: var(--danger); }
@@ -40,16 +38,27 @@
     input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; background: #fff; }
     .row-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
     
+    /* Kompaktes Dropdown direkt auf der Karte zum Übersiedeln */
+    .loc-select {
+      width: auto;
+      padding: 4px 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border-radius: 12px;
+      border: 1px solid #bae6fd;
+      background: #e0f2fe;
+      color: #0369a1;
+      margin-top: 2px;
+    }
+
     .filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
     .filter-btn { background: #e2e8f0; color: var(--text); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; white-space: nowrap; }
     .filter-btn.active { background: var(--primary); color: #fff; }
 
     .item-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
     .item-title { font-weight: 700; font-size: 1.05rem; margin: 0 0 4px 0; }
-    .badge { font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: 600; background: #e0f2fe; color: #0369a1; }
-    .item-meta { font-size: 0.85rem; color: var(--muted); margin-top: 8px; line-height: 1.4; }
-    .exp-soon { color: var(--warn); font-weight: 700; }
-    .exp-over { color: var(--danger); font-weight: 700; }
+    .item-meta { font-size: 0.85rem; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+    .exp-red { color: var(--danger); font-weight: 700; }
     #reader { width: 100%; border-radius: 10px; overflow: hidden; margin-top: 10px; }
     .status-bar { background: #fef3c7; color: #92400e; padding: 10px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 12px; text-align: center; }
   </style>
@@ -88,11 +97,7 @@
     <div class="row-2">
       <div>
         <label>Lagerort</label>
-        <select id="inpLocation">
-          <option value="Kühlschrank">Kühlschrank</option>
-          <option value="Gefrierschrank">Gefrierschrank</option>
-          <option value="Vorratskammer">Vorratskammer</option>
-        </select>
+        <select id="inpLocation"></select>
       </div>
       <div>
         <label>Menge / Stk.</label>
@@ -118,23 +123,31 @@
 
   <input type="text" id="searchInput" placeholder="🔍 Vorrat durchsuchen..." oninput="renderList()" style="margin-bottom:10px;" />
   
-  <div class="filters">
-    <button class="filter-btn active" onclick="setFilter('Alle', this)">Alle</button>
-    <button class="filter-btn" onclick="setFilter('Kühlschrank', this)">Kühlschrank</button>
-    <button class="filter-btn" onclick="setFilter('Gefrierschrank', this)">Gefrierschrank</button>
-    <button class="filter-btn" onclick="setFilter('Vorratskammer', this)">Vorratskammer</button>
-  </div>
+  <div class="filters" id="filterBar"></div>
 
   <div id="inventoryList">Lade Bestand...</div>
 </div>
 
 <script>
-  // HIER DEINE GOOGLE APPS SCRIPT WEB-APP-URL EINTRAGEN:
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxRJDa2YrMNpY9brSuCspUiPZ6SQUO3_P-FXRvdQp-huDDorogPi_pS6f7dDzdFB8u1Og/exec';
+  // 1. HIER DEINE GOOGLE APPS SCRIPT WEB-APP-URL EINTRAGEN:
+  const SCRIPT_URL = 'DEINE_GOOGLE_APPS_SCRIPT_URL_HIER_EINFUEGEN';
+
+  // 2. ZENTRALE LISTE DER LAGERORTE (hier beliebig erweitern):
+  const LOCATIONS = ['Kühlschrank', 'Gefrierschrank', 'Vorratskammer', 'Keller'];
 
   let inventory = [];
   let currentFilter = 'Alle';
   let html5QrCode = null;
+
+  // Lagerorte automatisch in Formular & Filterleiste einfügen
+  function initLocations() {
+    const sel = document.getElementById('inpLocation');
+    sel.innerHTML = LOCATIONS.map(loc => `<option value="${loc}">${loc}</option>`).join('');
+
+    const bar = document.getElementById('filterBar');
+    bar.innerHTML = `<button class="filter-btn active" onclick="setFilter('Alle', this)">Alle</button>` +
+      LOCATIONS.map(loc => `<button class="filter-btn" onclick="setFilter('${loc}', this)">${loc}</button>`).join('');
+  }
 
   function showStatus(text, duration = 4000) {
     const el = document.getElementById('statusMsg');
@@ -157,12 +170,14 @@
   function renderList() {
     const listEl = document.getElementById('inventoryList');
     const query = document.getElementById('searchInput').value.toLowerCase();
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     const filtered = inventory
       .filter(item => currentFilter === 'Alle' || item.location === currentFilter)
       .filter(item => item.name.toLowerCase().includes(query) || item.code.toLowerCase().includes(query))
-      .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+      // Sortiert nach Ablaufdatum: frühestes Datum zuerst, Einträge ohne Datum ganz unten
+      .sort((a, b) => (a.date || '9999-12-31').localeCompare(b.date || '9999-12-31'));
 
     if (filtered.length === 0) {
       listEl.innerHTML = '<div class="card" style="text-align:center; color:#64748b;">Keine Einträge gefunden.</div>';
@@ -170,20 +185,32 @@
     }
 
     listEl.innerHTML = filtered.map(item => {
-      const isFrozen = item.location === 'Gefrierschrank';
+      const isFrozen = item.location.toLowerCase().includes('gefrier');
       const dateText = isFrozen ? `Eingefroren: ${item.date || '-'}` : `MHD: ${item.date || '-'}`;
       let dateClass = '';
+
+      // Rot färben, wenn nicht eingefroren und weniger als 7 Tage haltbar (oder bereits abgelaufen)
       if (!isFrozen && item.date) {
-        if (item.date < today) dateClass = 'exp-over';
-        else if (item.date <= new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]) dateClass = 'exp-soon';
+        const expDate = new Date(item.date + 'T00:00:00');
+        const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+        if (diffDays < 7) {
+          dateClass = 'exp-red';
+        }
       }
+
+      // Optionen für das schnelle Umzugs-Dropdown
+      const locOptions = LOCATIONS.map(loc =>
+        `<option value="${loc}" ${item.location === loc ? 'selected' : ''}>📍 ${loc}</option>`
+      ).join('');
 
       return `
         <div class="card">
           <div class="item-header">
             <div>
               <p class="item-title">${item.name}</p>
-              <span class="badge">${item.location}</span>
+              <select class="loc-select" onchange="moveLocation('${item.id}', this.value)" title="Lagerort wechseln">
+                ${locOptions}
+              </select>
             </div>
             <div class="qty-controls">
               <button class="btn-qty btn-minus" onclick="changeQty('${item.id}', -1)" title="1 verbraucht">−</button>
@@ -206,6 +233,17 @@
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     renderList();
+  }
+
+  // Lagerort eines bestehenden Artikels ändern ("übersiedeln")
+  async function moveLocation(id, newLocation) {
+    showStatus(`Verschiebe nach ${newLocation}...`, 0);
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'moveLocation', id: id, newLocation: newLocation })
+    });
+    showStatus(`✅ Nach "${newLocation}" verschoben!`);
+    await loadInventory();
   }
 
   // 1. BARCODE SCANNER
@@ -332,7 +370,7 @@
       document.getElementById('btnWriteNfc').classList.remove('hidden');
     } else {
       document.getElementById('formTitle').textContent = '🛒 Gekauftes Lebensmittel';
-      document.getElementById('inpLocation').value = 'Kühlschrank';
+      document.getElementById('inpLocation').value = LOCATIONS[0];
       document.getElementById('dateLabel').textContent = 'Ablaufdatum (MHD)';
       document.getElementById('inpDate').value = '';
       document.getElementById('btnWriteNfc').classList.add('hidden');
@@ -383,6 +421,7 @@
     await loadInventory();
   }
 
+  initLocations();
   loadInventory();
 </script>
 </body>

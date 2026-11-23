@@ -129,7 +129,7 @@
 </div>
 
 <script>
-  // 1. HIER DEINE GOOGLE APPS SCRIPT WEB-APP-URL EINTRAGEN:
+  // 1. HIER DEINE GOOGLE APPS SCRIPT WEB-APP-URL IN ANFÜHRUNGSZEICHEN EINTRAGEN:
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxRJDa2YrMNpY9brSuCspUiPZ6SQUO3_P-FXRvdQp-huDDorogPi_pS6f7dDzdFB8u1Og/exec';
 
   // 2. ZENTRALE LISTE DER LAGERORTE (hier beliebig erweitern):
@@ -167,6 +167,23 @@
     }
   }
 
+  // Hilfsfunktion: Wandelt jedes Datumsformat (YYYY-MM-DD, ISO-String, TT.MM.JJJJ) sauber um
+  function parseDate(dateStr) {
+    if (!dateStr) return null;
+    const clean = String(dateStr).trim();
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(clean)) {
+      const [d, m, y] = clean.split('.');
+      return new Date(Number(y), Number(m) - 1, Number(d));
+    }
+    const isoPart = clean.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(isoPart)) {
+      const [y, m, d] = isoPart.split('-');
+      return new Date(Number(y), Number(m) - 1, Number(d));
+    }
+    const fallback = new Date(clean);
+    return isNaN(fallback.getTime()) ? null : fallback;
+  }
+
   function renderList() {
     const listEl = document.getElementById('inventoryList');
     const query = document.getElementById('searchInput').value.toLowerCase();
@@ -176,8 +193,15 @@
     const filtered = inventory
       .filter(item => currentFilter === 'Alle' || item.location === currentFilter)
       .filter(item => item.name.toLowerCase().includes(query) || item.code.toLowerCase().includes(query))
-      // Sortiert nach Ablaufdatum: frühestes Datum zuerst, Einträge ohne Datum ganz unten
-      .sort((a, b) => (a.date || '9999-12-31').localeCompare(b.date || '9999-12-31'));
+      // Echte Datums-Sortierung: frühestes Datum ganz oben, Einträge ohne Datum ganz unten
+      .sort((a, b) => {
+        const dA = parseDate(a.date);
+        const dB = parseDate(b.date);
+        if (!dA && !dB) return 0;
+        if (!dA) return 1;
+        if (!dB) return -1;
+        return dA - dB;
+      });
 
     if (filtered.length === 0) {
       listEl.innerHTML = '<div class="card" style="text-align:center; color:#64748b;">Keine Einträge gefunden.</div>';
@@ -186,13 +210,18 @@
 
     listEl.innerHTML = filtered.map(item => {
       const isFrozen = item.location.toLowerCase().includes('gefrier');
-      const dateText = isFrozen ? `Eingefroren: ${item.date || '-'}` : `MHD: ${item.date || '-'}`;
+      const parsedDate = parseDate(item.date);
+
+      const formattedDate = parsedDate
+        ? parsedDate.toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : '-';
+
+      const dateText = isFrozen ? `Eingefroren: ${formattedDate}` : `MHD: ${formattedDate}`;
       let dateClass = '';
 
       // Rot färben, wenn nicht eingefroren und weniger als 7 Tage haltbar (oder bereits abgelaufen)
-      if (!isFrozen && item.date) {
-        const expDate = new Date(item.date + 'T00:00:00');
-        const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+      if (!isFrozen && parsedDate) {
+        const diffDays = Math.ceil((parsedDate - today) / (1000 * 60 * 60 * 24));
         if (diffDays < 7) {
           dateClass = 'exp-red';
         }

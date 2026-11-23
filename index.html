@@ -148,7 +148,21 @@
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxRJDa2YrMNpY9brSuCspUiPZ6SQUO3_P-FXRvdQp-huDDorogPi_pS6f7dDzdFB8u1Og/exec';
 
   // 2. ZENTRALE LISTE DER LAGERORTE (hier beliebig erweitern):
-  const LOCATIONS = ['Kühl- Küche', 'Kühl- Keller', 'Gefrierschrank', 'Vorratslade', 'Keller'];
+  const LOCATIONS = [
+  'Kühl- Küche',
+  'Kühl- Keller',
+  'Gefrierschrank',
+  'Vorratslade',
+  'Keller'
+];
+
+const LOCATION_ICONS = {
+  'Kühl- Küche': '🧊',
+  'Kühl- Keller': '🌡️',
+  'Gefrierschrank': '❄️',
+  'Vorratslade': '🗄️',
+  'Keller': '📦'
+};
 
   let inventory = [];
   let currentFilter = 'Alle';

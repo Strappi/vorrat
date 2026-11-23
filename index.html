@@ -16,8 +16,9 @@
     }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { margin: 0; background: var(--bg); color: var(--text); padding-bottom: 80px; }
-    header { background: var(--primary); color: #fff; padding: 16px; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
-    header h1 { margin: 0; font-size: 1.25rem; }
+    header { background: var(--primary); color: #fff; padding: 16px; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+    header h1 { margin: 0; font-size: 1.2rem; }
+    .btn-lock { background: rgba(255,255,255,0.2); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 0.8rem; }
     .container { padding: 14px; max-width: 600px; margin: 0 auto; }
     
     .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -38,7 +39,6 @@
     input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; background: #fff; }
     .row-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
     
-    /* Kompaktes Dropdown direkt auf der Karte zum Übersiedeln */
     .loc-select {
       width: auto;
       padding: 4px 8px;
@@ -67,68 +67,80 @@
 
 <header>
   <h1>📦 Vorrats- & Gefrierlogistik</h1>
+  <button id="logoutBtn" class="btn-lock hidden" onclick="logout()">🔒 Sperren</button>
 </header>
 
 <div class="container">
   <div id="statusMsg" class="status-bar hidden"></div>
 
-  <div class="actions">
-    <button class="btn-primary" onclick="openBarcodeForm()">📷 Barcode scannen</button>
-    <button class="btn-nfc" onclick="scanNfcCheck()">📡 NFC prüfen / einfrieren</button>
+  <!-- Login-Bildschirm (erscheint nur einmalig pro Gerät) -->
+  <div id="loginBox" class="card hidden">
+    <h3 style="margin-top:0;">🔐 Familien-Zugang</h3>
+    <p style="font-size:0.9rem; color:var(--muted);">Bitte gib das geheime Haushalts-Passwort ein, um den Vorrat anzuzeigen.</p>
+    <input type="password" id="inpToken" placeholder="Passwort eingeben..." onkeydown="if(event.key==='Enter') saveToken()" />
+    <button class="btn-primary" style="width:100%; margin-top:12px;" onclick="saveToken()">Entsperren</button>
   </div>
 
-  <!-- Kamera Scanner Bereich -->
-  <div id="scannerBox" class="card hidden">
-    <strong>Barcode vor die Kamera halten</strong>
-    <div id="reader"></div>
-    <div style="display:flex; gap:10px; margin-top:10px;">
-      <button class="btn-primary" style="flex:1;" onclick="switchCamera()">🔄 Kamera wechseln</button>
-      <button class="btn-secondary" style="flex:1;" onclick="stopScanner()">Abbrechen</button>
+  <!-- Eigentliche App (erst nach Passwort sichtbar) -->
+  <div id="appContent" class="hidden">
+    <div class="actions">
+      <button class="btn-primary" onclick="openBarcodeForm()">📷 Barcode scannen</button>
+      <button class="btn-nfc" onclick="scanNfcCheck()">📡 NFC prüfen / einfrieren</button>
     </div>
-  </div>
 
-  <!-- Eingabeformular -->
-  <div id="entryForm" class="card hidden">
-    <h3 id="formTitle" style="margin-top:0;">Lebensmittel erfassen</h3>
+    <!-- Kamera Scanner Bereich -->
+    <div id="scannerBox" class="card hidden">
+      <strong>Barcode vor die Kamera halten</strong>
+      <div id="reader"></div>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="btn-primary" style="flex:1;" onclick="switchCamera()">🔄 Kamera wechseln</button>
+        <button class="btn-secondary" style="flex:1;" onclick="stopScanner()">Abbrechen</button>
+      </div>
+    </div>
+
+    <!-- Eingabeformular -->
+    <div id="entryForm" class="card hidden">
+      <h3 id="formTitle" style="margin-top:0;">Lebensmittel erfassen</h3>
+      
+      <label>Barcode / NFC-Chip-ID</label>
+      <input type="text" id="inpCode" placeholder="Wird automatisch ausgefüllt" />
+
+      <label>Produktname / Speise *</label>
+      <input type="text" id="inpName" placeholder="z.B. Hafermilch oder Bolognese" required />
+
+      <div class="row-2">
+        <div>
+          <label>Lagerort</label>
+          <select id="inpLocation"></select>
+        </div>
+        <div>
+          <label>Menge / Stk.</label>
+          <input type="number" id="inpQty" value="1" min="1" />
+        </div>
+      </div>
+
+      <label id="dateLabel">Ablaufdatum (MHD)</label>
+      <input type="date" id="inpDate" />
+
+      <label>Zucker (g pro 100g)</label>
+      <input type="text" id="inpSugar" placeholder="z.B. 4.5" />
+
+      <label>Weitere Details (Kalorien, Marke, Notiz)</label>
+      <input type="text" id="inpDetails" placeholder="z.B. 120 kcal/100g" />
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn-primary" style="flex:1;" onclick="saveEntry()">💾 Speichern</button>
+        <button class="btn-nfc" id="btnWriteNfc" style="flex:1;" onclick="writeNfcAndSave()">📡 Auf NFC & Speichern</button>
+      </div>
+      <button class="btn-secondary" style="width:100%; margin-top:8px;" onclick="closeForm()">Schließen</button>
+    </div>
+
+    <input type="text" id="searchInput" placeholder="🔍 Vorrat durchsuchen..." oninput="renderList()" style="margin-bottom:10px;" />
     
-    <label>Barcode / NFC-Chip-ID</label>
-    <input type="text" id="inpCode" placeholder="Wird automatisch ausgefüllt" />
+    <div class="filters" id="filterBar"></div>
 
-    <label>Produktname / Speise *</label>
-    <input type="text" id="inpName" placeholder="z.B. Hafermilch oder Bolognese" required />
-
-    <div class="row-2">
-      <div>
-        <label>Lagerort</label>
-        <select id="inpLocation"></select>
-      </div>
-      <div>
-        <label>Menge / Stk.</label>
-        <input type="number" id="inpQty" value="1" min="1" />
-      </div>
-    </div>
-
-    <label id="dateLabel">Ablaufdatum (MHD)</label>
-    <input type="date" id="inpDate" />
-
-    <label>Zucker (g pro 100g)</label>
-    <input type="text" id="inpSugar" placeholder="z.B. 4.5" />
-
-    <label>Weitere Details (Kalorien, Marke, Notiz)</label>
-    <input type="text" id="inpDetails" placeholder="z.B. 120 kcal/100g" />
-
-    <div style="display:flex; gap:10px; margin-top:16px;">
-      <button class="btn-primary" style="flex:1;" onclick="saveEntry()">💾 Speichern</button>
-      <button class="btn-nfc" id="btnWriteNfc" style="flex:1;" onclick="writeNfcAndSave()">📡 Auf NFC & Speichern</button>
-    </div>
-    <button class="btn-secondary" style="width:100%; margin-top:8px;" onclick="closeForm()">Schließen</button>
+    <div id="inventoryList">Lade Bestand...</div>
   </div>
-
-  <input type="text" id="searchInput" placeholder="🔍 Vorrat durchsuchen..." oninput="renderList()" style="margin-bottom:10px;" />
-  
-  <div class="filters" id="filterBar"></div>
-
-  <div id="inventoryList">Lade Bestand...</div>
 </div>
 
 <script>
@@ -141,10 +153,38 @@
   let inventory = [];
   let currentFilter = 'Alle';
   let html5QrCode = null;
-  // Merkt sich pro Gerät (Handy vs. Tablet), ob Front- ("user") oder Rückkamera ("environment") aktiv ist
   let currentFacingMode = localStorage.getItem('preferredCamera') || 'environment';
+  let appToken = localStorage.getItem('vorratToken') || '';
 
-  // Lagerorte automatisch in Formular & Filterleiste einfügen
+  function checkAuth() {
+    if (!appToken) {
+      document.getElementById('loginBox').classList.remove('hidden');
+      document.getElementById('appContent').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+    } else {
+      document.getElementById('loginBox').classList.add('hidden');
+      document.getElementById('appContent').classList.remove('hidden');
+      document.getElementById('logoutBtn').classList.remove('hidden');
+      loadInventory();
+    }
+  }
+
+  function saveToken() {
+    const val = document.getElementById('inpToken').value.trim();
+    if (!val) return;
+    appToken = val;
+    localStorage.setItem('vorratToken', appToken);
+    document.getElementById('inpToken').value = '';
+    checkAuth();
+  }
+
+  function logout() {
+    localStorage.removeItem('vorratToken');
+    appToken = '';
+    inventory = [];
+    checkAuth();
+  }
+
   function initLocations() {
     const sel = document.getElementById('inpLocation');
     sel.innerHTML = LOCATIONS.map(loc => `<option value="${loc}">${loc}</option>`).join('');
@@ -163,8 +203,16 @@
 
   async function loadInventory() {
     try {
-      const res = await fetch(SCRIPT_URL);
+      const urlWithToken = `${SCRIPT_URL}?token=${encodeURIComponent(appToken)}`;
+      const res = await fetch(urlWithToken);
       const data = await res.json();
+
+      if (data.status === 'unauthorized') {
+        showStatus('❌ Falsches Passwort! Bitte erneut eingeben.', 5000);
+        logout();
+        return;
+      }
+
       inventory = data.items || [];
       renderList();
     } catch (err) {
@@ -172,7 +220,6 @@
     }
   }
 
-  // Hilfsfunktion: Wandelt jedes Datumsformat (YYYY-MM-DD, ISO-String, TT.MM.JJJJ) sauber um
   function parseDate(dateStr) {
     if (!dateStr) return null;
     const clean = String(dateStr).trim();
@@ -198,7 +245,6 @@
     const filtered = inventory
       .filter(item => currentFilter === 'Alle' || item.location === currentFilter)
       .filter(item => item.name.toLowerCase().includes(query) || item.code.toLowerCase().includes(query))
-      // Echte Datums-Sortierung: frühestes Datum ganz oben, Einträge ohne Datum ganz unten
       .sort((a, b) => {
         const dA = parseDate(a.date);
         const dB = parseDate(b.date);
@@ -224,7 +270,6 @@
       const dateText = isFrozen ? `Eingefroren: ${formattedDate}` : `MHD: ${formattedDate}`;
       let dateClass = '';
 
-      // Rot färben, wenn nicht eingefroren und weniger als 7 Tage haltbar (oder bereits abgelaufen)
       if (!isFrozen && parsedDate) {
         const diffDays = Math.ceil((parsedDate - today) / (1000 * 60 * 60 * 24));
         if (diffDays < 7) {
@@ -232,7 +277,6 @@
         }
       }
 
-      // Optionen für das schnelle Umzugs-Dropdown
       const locOptions = LOCATIONS.map(loc =>
         `<option value="${loc}" ${item.location === loc ? 'selected' : ''}>📍 ${loc}</option>`
       ).join('');
@@ -269,18 +313,16 @@
     renderList();
   }
 
-  // Lagerort eines bestehenden Artikels ändern ("übersiedeln")
   async function moveLocation(id, newLocation) {
     showStatus(`Verschiebe nach ${newLocation}...`, 0);
     await fetch(SCRIPT_URL, {
       method: 'POST',
-      body: JSON.stringify({ action: 'moveLocation', id: id, newLocation: newLocation })
+      body: JSON.stringify({ token: appToken, action: 'moveLocation', id: id, newLocation: newLocation })
     });
     showStatus(`✅ Nach "${newLocation}" verschoben!`);
     await loadInventory();
   }
 
-  // 1. BARCODE SCANNER (mit Front-/Rückkamera-Umschaltung)
   function openBarcodeForm() {
     closeForm();
     document.getElementById('scannerBox').classList.remove('hidden');
@@ -348,7 +390,6 @@
     }
   }
 
-  // 2. WEB NFC
   async function scanNfcCheck() {
     closeForm();
     if (!('NDEFReader' in window)) {
@@ -436,6 +477,7 @@
 
   async function saveEntry() {
     const payload = {
+      token: appToken,
       action: 'add',
       code: document.getElementById('inpCode').value.trim(),
       name: document.getElementById('inpName').value.trim(),
@@ -468,14 +510,14 @@
     showStatus(delta < 0 ? 'Buche 1 Stück aus...' : 'Füge 1 Stück hinzu...', 0);
     await fetch(SCRIPT_URL, {
       method: 'POST',
-      body: JSON.stringify({ action: 'updateQty', id: id, delta: delta })
+      body: JSON.stringify({ token: appToken, action: 'updateQty', id: id, delta: delta })
     });
     showStatus('✅ Bestand aktualisiert.');
     await loadInventory();
   }
 
   initLocations();
-  loadInventory();
+  checkAuth();
 </script>
 </body>
 </html>

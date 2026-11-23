@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Vorrats-Logistik</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --danger: #dc2626;
+      --warn: #d97706;
+    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); padding-bottom: 80px; }
+    header { background: var(--primary); color: #fff; padding: 16px; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    header h1 { margin: 0; font-size: 1.25rem; }
+    .container { padding: 14px; max-width: 600px; margin: 0 auto; }
+    
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    button { border: none; border-radius: 10px; padding: 12px; font-size: 0.95rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-nfc { background: #0f766e; color: #fff; }
+    .btn-secondary { background: #e2e8f0; color: var(--text); }
+    
+    /* Mengen-Steuerung in der Karte */
+    .qty-controls { display: flex; align-items: center; gap: 6px; }
+    .btn-qty { padding: 6px 12px; border-radius: 8px; font-size: 1rem; font-weight: 700; }
+    .btn-minus { background: #fee2e2; color: var(--danger); }
+    .btn-plus { background: #dcfce7; color: #15803d; }
+    .qty-badge { font-weight: 800; font-size: 1rem; min-width: 28px; text-align: center; }
+
+    .card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .hidden { display: none !important; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 10px; margin-bottom: 4px; color: var(--muted); }
+    input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; background: #fff; }
+    .row-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+    
+    .filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
+    .filter-btn { background: #e2e8f0; color: var(--text); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; white-space: nowrap; }
+    .filter-btn.active { background: var(--primary); color: #fff; }
+
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .item-title { font-weight: 700; font-size: 1.05rem; margin: 0 0 4px 0; }
+    .badge { font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: 600; background: #e0f2fe; color: #0369a1; }
+    .item-meta { font-size: 0.85rem; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+    .exp-soon { color: var(--warn); font-weight: 700; }
+    .exp-over { color: var(--danger); font-weight: 700; }
+    #reader { width: 100%; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+    .status-bar { background: #fef3c7; color: #92400e; padding: 10px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📦 Vorrats- & Gefrierlogistik</h1>
+</header>
+
+<div class="container">
+  <div id="statusMsg" class="status-bar hidden"></div>
+
+  <div class="actions">
+    <button class="btn-primary" onclick="openBarcodeForm()">📷 Barcode scannen</button>
+    <button class="btn-nfc" onclick="scanNfcCheck()">📡 NFC prüfen / einfrieren</button>
+  </div>
+
+  <!-- Kamera Scanner Bereich -->
+  <div id="scannerBox" class="card hidden">
+    <strong>Barcode vor die Kamera halten</strong>
+    <div id="reader"></div>
+    <button class="btn-secondary" style="width:100%; margin-top:10px;" onclick="stopScanner()">Abbrechen</button>
+  </div>
+
+  <!-- Eingabeformular -->
+  <div id="entryForm" class="card hidden">
+    <h3 id="formTitle" style="margin-top:0;">Lebensmittel erfassen</h3>
+    
+    <label>Barcode / NFC-Chip-ID</label>
+    <input type="text" id="inpCode" placeholder="Wird automatisch ausgefüllt" />
+
+    <label>Produktname / Speise *</label>
+    <input type="text" id="inpName" placeholder="z.B. Hafermilch oder Bolognese" required />
+
+    <div class="row-2">
+      <div>
+        <label>Lagerort</label>
+        <select id="inpLocation">
+          <option value="Kühlschrank">Kühlschrank</option>
+          <option value="Gefrierschrank">Gefrierschrank</option>
+          <option value="Vorratskammer">Vorratskammer</option>
+        </select>
+      </div>
+      <div>
+        <label>Menge / Stk.</label>
+        <input type="number" id="inpQty" value="1" min="1" />
+      </div>
+    </div>
+
+    <label id="dateLabel">Ablaufdatum (MHD)</label>
+    <input type="date" id="inpDate" />
+
+    <label>Zucker (g pro 100g)</label>
+    <input type="text" id="inpSugar" placeholder="z.B. 4.5" />
+
+    <label>Weitere Details (Kalorien, Marke, Notiz)</label>
+    <input type="text" id="inpDetails" placeholder="z.B. 120 kcal/100g" />
+
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="btn-primary" style="flex:1;" onclick="saveEntry()">💾 Speichern</button>
+      <button class="btn-nfc" id="btnWriteNfc" style="flex:1;" onclick="writeNfcAndSave()">📡 Auf NFC & Speichern</button>
+    </div>
+    <button class="btn-secondary" style="width:100%; margin-top:8px;" onclick="closeForm()">Schließen</button>
+  </div>
+
+  <input type="text" id="searchInput" placeholder="🔍 Vorrat durchsuchen..." oninput="renderList()" style="margin-bottom:10px;" />
+  
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter('Alle', this)">Alle</button>
+    <button class="filter-btn" onclick="setFilter('Kühlschrank', this)">Kühlschrank</button>
+    <button class="filter-btn" onclick="setFilter('Gefrierschrank', this)">Gefrierschrank</button>
+    <button class="filter-btn" onclick="setFilter('Vorratskammer', this)">Vorratskammer</button>
+  </div>
+
+  <div id="inventoryList">Lade Bestand...</div>
+</div>
+
+<script>
+  // HIER DEINE GOOGLE APPS SCRIPT WEB-APP-URL EINTRAGEN:
+  const SCRIPT_URL = https://script.google.com/macros/s/AKfycbxRJDa2YrMNpY9brSuCspUiPZ6SQUO3_P-FXRvdQp-huDDorogPi_pS6f7dDzdFB8u1Og/exec;
+
+  let inventory = [];
+  let currentFilter = 'Alle';
+  let html5QrCode = null;
+
+  function showStatus(text, duration = 4000) {
+    const el = document.getElementById('statusMsg');
+    el.textContent = text;
+    el.classList.remove('hidden');
+    if (duration > 0) setTimeout(() => el.classList.add('hidden'), duration);
+  }
+
+  async function loadInventory() {
+    try {
+      const res = await fetch(SCRIPT_URL);
+      const data = await res.json();
+      inventory = data.items || [];
+      renderList();
+    } catch (err) {
+      document.getElementById('inventoryList').innerHTML = '<div class="card">Fehler beim Laden der Daten. Prüfe die SCRIPT_URL.</div>';
+    }
+  }
+
+  function renderList() {
+    const listEl = document.getElementById('inventoryList');
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    const today = new Date().toISOString().split('T')[0];
+
+    const filtered = inventory
+      .filter(item => currentFilter === 'Alle' || item.location === currentFilter)
+      .filter(item => item.name.toLowerCase().includes(query) || item.code.toLowerCase().includes(query))
+      .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="card" style="text-align:center; color:#64748b;">Keine Einträge gefunden.</div>';
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(item => {
+      const isFrozen = item.location === 'Gefrierschrank';
+      const dateText = isFrozen ? `Eingefroren: ${item.date || '-'}` : `MHD: ${item.date || '-'}`;
+      let dateClass = '';
+      if (!isFrozen && item.date) {
+        if (item.date < today) dateClass = 'exp-over';
+        else if (item.date <= new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]) dateClass = 'exp-soon';
+      }
+
+      return `
+        <div class="card">
+          <div class="item-header">
+            <div>
+              <p class="item-title">${item.name}</p>
+              <span class="badge">${item.location}</span>
+            </div>
+            <div class="qty-controls">
+              <button class="btn-qty btn-minus" onclick="changeQty('${item.id}', -1)" title="1 verbraucht">−</button>
+              <span class="qty-badge">${item.quantity}x</span>
+              <button class="btn-qty btn-plus" onclick="changeQty('${item.id}', 1)" title="1 hinzufügen">+</button>
+            </div>
+          </div>
+          <div class="item-meta">
+            <span class="${dateClass}">${dateText}</span> • Zucker: ${item.sugar} g/100g<br>
+            ${item.details ? `Details: ${item.details}<br>` : ''}
+            ${item.code ? `<small>Code/NFC: ${item.code}</small>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function setFilter(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderList();
+  }
+
+  // 1. BARCODE SCANNER
+  function openBarcodeForm() {
+    closeForm();
+    document.getElementById('scannerBox').classList.remove('hidden');
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 150 } },
+      async (decodedText) => {
+        stopScanner();
+        prepareForm(decodedText, false);
+        showStatus('Suche Produktdaten bei Open Food Facts...', 0);
+        await fetchOpenFoodFacts(decodedText);
+      }
+    ).catch(err => {
+      stopScanner();
+      prepareForm('', false);
+      showStatus('Kamera nicht verfügbar – bitte manuell eingeben.');
+    });
+  }
+
+  function stopScanner() {
+    document.getElementById('scannerBox').classList.add('hidden');
+    if (html5QrCode) {
+      html5QrCode.stop().catch(() => {});
+      html5QrCode = null;
+    }
+  }
+
+  async function fetchOpenFoodFacts(barcode) {
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await res.json();
+      if (data.status === 1 && data.product) {
+        const p = data.product;
+        document.getElementById('inpName').value = p.product_name_de || p.product_name || '';
+        const sugar = p.nutriments && p.nutriments.sugars_100g !== undefined ? p.nutriments.sugars_100g : '';
+        const kcal = p.nutriments && p.nutriments['energy-kcal_100g'] ? `${p.nutriments['energy-kcal_100g']} kcal/100g` : '';
+        document.getElementById('inpSugar').value = sugar;
+        document.getElementById('inpDetails').value = [p.brands, kcal].filter(Boolean).join(', ');
+        showStatus('Produktdaten erfolgreich geladen!');
+      } else {
+        showStatus('Produkt nicht in Datenbank – bitte Name eingeben.');
+      }
+    } catch (e) {
+      showStatus('Fehler beim Abruf der Produktdaten.');
+    }
+  }
+
+  // 2. WEB NFC
+  async function scanNfcCheck() {
+    closeForm();
+    if (!('NDEFReader' in window)) {
+      alert('Web NFC wird nur in Google Chrome auf Android unterstützt. Öffne das Formular manuell.');
+      prepareForm('DOSE-' + Math.floor(Math.random() * 100), true);
+      return;
+    }
+
+    try {
+      const ndef = new NDEFReader();
+      await ndef.scan();
+      showStatus('📡 Bitte Android-Handy jetzt an den NFC-Chip der Dose halten...', 0);
+
+      ndef.onreading = ({ message, serialNumber }) => {
+        let chipText = '';
+        for (const record of message.records) {
+          if (record.recordType === "text") {
+            const decoder = new TextDecoder(record.encoding);
+            chipText = decoder.decode(record.data);
+          }
+        }
+        const chipId = serialNumber || 'NFC-TAG';
+        const existing = inventory.find(i => i.code === chipId);
+
+        if (existing) {
+          document.getElementById('statusMsg').classList.add('hidden');
+          const consumeOne = confirm(`Gefunden in Dose (${chipId}):\n\n🍲 ${existing.name} (${existing.quantity}x)\n📅 Eingefroren am: ${existing.date}\n\nMöchtest du 1 Portion als VERBRAUCHT ausbuchen?`);
+          if (consumeOne) changeQty(existing.id, -1);
+        } else {
+          showStatus('Leere/neue Dose erkannt! Speise eintragen.');
+          prepareForm(chipId, true);
+          if (chipText) document.getElementById('inpName').value = chipText;
+        }
+      };
+    } catch (error) {
+      showStatus('NFC-Fehler: ' + error.message);
+    }
+  }
+
+  async function writeNfcAndSave() {
+    const name = document.getElementById('inpName').value.trim();
+    const date = document.getElementById('inpDate').value;
+    if (!name) return alert('Bitte zuerst den Namen der Speise eingeben!');
+
+    if ('NDEFReader' in window) {
+      try {
+        showStatus('📡 Handy an den NFC-Sticker halten, um Speise & Datum zu schreiben...', 0);
+        const ndef = new NDEFReader();
+        await ndef.write(`${name} (${date})`);
+        showStatus('✅ NFC-Chip erfolgreich beschrieben!');
+      } catch (error) {
+        alert('NFC-Schreibfehler: ' + error.message);
+        return;
+      }
+    }
+    await saveEntry();
+  }
+
+  function prepareForm(code, isNfc) {
+    document.getElementById('entryForm').classList.remove('hidden');
+    document.getElementById('inpCode').value = code;
+    document.getElementById('inpName').value = '';
+    document.getElementById('inpQty').value = 1;
+    document.getElementById('inpSugar').value = '';
+    document.getElementById('inpDetails').value = '';
+    
+    if (isNfc) {
+      document.getElementById('formTitle').textContent = '🍲 Gekochte Speise einfrieren';
+      document.getElementById('inpLocation').value = 'Gefrierschrank';
+      document.getElementById('dateLabel').textContent = 'Einfrierdatum';
+      document.getElementById('inpDate').value = new Date().toISOString().split('T')[0];
+      document.getElementById('btnWriteNfc').classList.remove('hidden');
+    } else {
+      document.getElementById('formTitle').textContent = '🛒 Gekauftes Lebensmittel';
+      document.getElementById('inpLocation').value = 'Kühlschrank';
+      document.getElementById('dateLabel').textContent = 'Ablaufdatum (MHD)';
+      document.getElementById('inpDate').value = '';
+      document.getElementById('btnWriteNfc').classList.add('hidden');
+    }
+  }
+
+  function closeForm() {
+    document.getElementById('entryForm').classList.add('hidden');
+  }
+
+  async function saveEntry() {
+    const payload = {
+      action: 'add',
+      code: document.getElementById('inpCode').value.trim(),
+      name: document.getElementById('inpName').value.trim(),
+      location: document.getElementById('inpLocation').value,
+      quantity: Number(document.getElementById('inpQty').value) || 1,
+      date: document.getElementById('inpDate').value,
+      sugar: document.getElementById('inpSugar').value.trim(),
+      details: document.getElementById('inpDetails').value.trim()
+    };
+
+    if (!payload.name) return alert('Bitte einen Namen eingeben.');
+
+    showStatus('Speichere in Google Sheets...', 0);
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+
+    closeForm();
+    if (result.status === 'merged') {
+      showStatus(`✅ Bestand zusammengefasst! Neue Menge: ${result.newQuantity}x`);
+    } else {
+      showStatus('✅ Gespeichert!');
+    }
+    await loadInventory();
+  }
+
+  async function changeQty(id, delta) {
+    showStatus(delta < 0 ? 'Buche 1 Stück aus...' : 'Füge 1 Stück hinzu...', 0);
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'updateQty', id: id, delta: delta })
+    });
+    showStatus('✅ Bestand aktualisiert.');
+    await loadInventory();
+  }
+
+  loadInventory();
+</script>
+</body>
+</html>
